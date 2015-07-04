@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+export BIN_DIR=$(cd $(dirname $0); pwd) # absolute path
+export ROOT_DIR=$(dirname $BIN_DIR)
+export BUILD_DIR="$1"
+export CACHE_DIR="$2"
+export ENV_DIR="$3"
+export HEROKU_DIR=".heroku"
+
+export PROFILE_DIR="$BUILD_DIR/.profile.d"
+export PROFILE_PATH="$PROFILE_DIR/python-extras.sh"
+export HEROKU_DIR=".heroku"
+export HEROKU_VENDOR_DIR="$HEROKU_DIR/vendor"
+export HEROKU_LIB_DIR="$HEROKU_VENDOR_DIR/lib"
+export LANG="en_US.UTF-8"
+export TIME_STEP_THRESHOLD=${TIME_STEP_THRESHOLD:-10}
+
+NODE_DIR="$HEROKU_DIR/node"
+NODE_VERSION=${NODE_VERSION:-"0.10.26"}
+NODE_INCLUDE_PATH="$(build_path $NODE_DIR)/include"
+NPM_BIN_DIR="node_modules/.bin"
+NODE_PROFILE_PATH="$PROFILE_DIR/node.sh"
+
+export PATH="$NPM_BIN_DIR:$(build_path $NODE_DIR)/bin:$PATH"
+export CPATH="$NODE_INCLUDE_PATH"
+export CPPPATH="$NODE_INCLUDE_PATH"
+
+# Let's get started...
+puts_step "Installing node packages using node version $NODE_VERSION"
+
+if [ ! "$FRESH_NODE" ] && [ -d "$NODE_DIR" ]; then
+    echo "Using node ($NODE_VERSION)" | indent
+else
+    # Install Node
+    echo "Installing node..." | indent
+    download_package "http://s3pository.heroku.com/node/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.gz" "$BUILD_DIR"
+
+    # Move node (and npm) into ./vendor and make them executable
+    mv "$BUILD_DIR/node-v$NODE_VERSION-linux-x64" "$NODE_DIR"
+    chmod +x $NODE_DIR/bin/*
+fi
+
+# See: http://blog.npmjs.org/post/78085451721/npms-self-signed-certificate-is-no-more
+npm config set ca ""
+
+# Install dependencies with npm
+npm install --production 2>&1 | indent
+
+# Setup runtime env
+mkdir -p $(dirname $NODE_PROFILE_PATH)
+set_env_override PATH "$NPM_BIN_DIR:$(app_path $NODE_DIR)/bin:\$PATH" "$NODE_PROFILE_PATH"
